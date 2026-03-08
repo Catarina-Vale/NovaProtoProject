@@ -21,8 +21,6 @@ CLEAR_COLOR = 0x000000
 # LED_STRIP = ws.SK6812W_STRIP
 leds = ws.new_ws2811_t()
 
-blinkchoice = [True, False]
-
 MOUTH_POS = [78,82,126,129,173,177,15,16,31,32,47,48,63,64,79,80,95,96,111,112,143,144,159,160,175,176,191,192,207,208,223,224,239,240,255,254,241,1,14]
 FEATURES_POS = [225,237,243,206,210,220,30,18,12,49,45,35]
 EYES_POS = [42,213,214,42,41,77,66,61,178,189,194,51,52,53,54,55,60,59,58,57,56,67,68,69,70,71,76,75,74,73,72,83,84,85,86,87,171,170,172,169,168,167,179,180,181,182,183,188,187,186,185,184,195,196,197,198,199,204,203,202,201,200]
@@ -101,6 +99,13 @@ def ClearRegion(channel, position):
     if resp != ws.WS2811_SUCCESS:
         message = ws.ws2811_get_return_t_str(resp)
         raise RuntimeError('ws2811_render failed with code {0} ({1})'.format(resp, message))
+    
+async def Blink(channel,lastEyePos):
+    ClearRegion(channel,EYES_POS)
+    SetEyes(channel, BLINK_EYE_POS)
+    await asyncio.sleep(0.5)
+    ClearRegion(channel,EYES_POS)
+    SetEyes(channel, lastEyePos)
 
 for channum in range(2):
     channel = ws.ws2811_channel_get(leds, channum)
@@ -127,53 +132,57 @@ if resp != ws.WS2811_SUCCESS:
 
 async def led_loop():
     global last_mode
-    global blinkchoice
+    lastEyePos = CALM_EYE_POS
     while True:
-        blink = random.choice(blinkchoice)
-        if(blink):
-            ClearRegion(channel,EYES_POS)
-            SetEyes(channel, BLINK_EYE_POS)
-            await asyncio.sleep(0.5)
-            ClearRegion(channel,EYES_POS)
-            
         if(current_tongue):
             SetTongue(channel)
         else:
             ClearRegion(channel,BLEP_TONGUE_POS)
             
         if current_mode == "blink":
+            lastEyePos = CALM_EYE_POS
             ClearRegion(channel, FEATURES_POS)
             SetEyes(channel, CALM_EYE_POS)
             SetMouth(channel, BASIC_SMILE_POS)
         elif current_mode == "off":
             FullClear(channel)
         elif current_mode == "flustered":
+            lastEyePos = CALM_EYE_POS
             SetEyes(channel, CALM_EYE_POS)
             SetFeatures(channel, FLUSTERED_FEATURE_POS)
             SetMouth(channel, SMALL_SMILE_POS)
         elif current_mode == "veryflustered":
+            lastEyePos = FLUSTERED_EYE_POS
             SetEyes(channel, FLUSTERED_EYE_POS)
             SetFeatures(channel, FLUSTERED_FEATURE_POS)
             SetMouth(channel, SMALL_SMILE_POS)
         elif current_mode == "smug":
+            lastEyePos = SMUG_EYES_POS
             SetEyes(channel, SMUG_EYES_POS)
             SetFeatures(channel, FLUSTERED_FEATURE_POS)
             SetMouth(channel, SMUG_SMILE_POS)
         elif current_mode == "worried":
+            lastEyePos = WORRIED_EYES_POS
             SetEyes(channel, WORRIED_EYES_POS)
             SetMouth(channel, SMALL_SMILE_POS)
         else:
             await asyncio.sleep(1)
+            
         last_mode = current_mode
         last_tongue = current_tongue
         # Wait 5 seconds, but check every 0.1s if mode changed
-        for _ in range(70):
+        for _ in range(100):
             await asyncio.sleep(0.1)
+            c = random.randint(1, 100)
+            if(c == 1):
+                await Blink(channel,lastEyePos)
             if current_tongue != last_tongue:
-                FullClear(channel)
+                ClearRegion(channel,BLEP_TONGUE_POS)
                 break
             if current_mode != last_mode:
-                FullClear(channel)
+                ClearRegion(channel,EYES_POS)
+                ClearRegion(channel,FEATURES_POS)
+                ClearRegion(channel,MOUTH_POS)
                 break
 
 async def input_loop():
